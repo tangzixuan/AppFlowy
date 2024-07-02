@@ -1,14 +1,21 @@
 use anyhow::Error;
+use client_api::entity::ai_dto::{
+  SummarizeRowData, SummarizeRowParams, TranslateRowData, TranslateRowParams,
+};
 use client_api::entity::QueryCollabResult::{Failed, Success};
 use client_api::entity::{QueryCollab, QueryCollabParams};
 use client_api::error::ErrorCode::RecordNotFound;
 use collab::core::collab::DataSource;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use serde_json::{Map, Value};
 use std::sync::Arc;
 use tracing::{error, instrument};
 
-use flowy_database_pub::cloud::{CollabDocStateByOid, DatabaseCloudService, DatabaseSnapshot};
+use flowy_database_pub::cloud::{
+  CollabDocStateByOid, DatabaseCloudService, DatabaseSnapshot, SummaryRowContent,
+  TranslateRowContent, TranslateRowResponse,
+};
 use lib_infra::future::FutureResult;
 
 use crate::af_cloud::define::ServerUser;
@@ -38,10 +45,7 @@ where
     FutureResult::new(async move {
       let params = QueryCollabParams {
         workspace_id: workspace_id.clone(),
-        inner: QueryCollab {
-          object_id: object_id.clone(),
-          collab_type: collab_type.clone(),
-        },
+        inner: QueryCollab::new(object_id.clone(), collab_type.clone()),
       };
       match try_get_client?.get_collab(params).await {
         Ok(data) => {
@@ -77,10 +81,7 @@ where
       let client = try_get_client?;
       let params = object_ids
         .into_iter()
-        .map(|object_id| QueryCollab {
-          object_id,
-          collab_type: object_ty.clone(),
-        })
+        .map(|object_id| QueryCollab::new(object_id, object_ty.clone()))
         .collect();
       let results = client.batch_get_collab(&workspace_id, params).await?;
       check_request_workspace_id_is_match(
@@ -118,5 +119,49 @@ where
     _limit: usize,
   ) -> FutureResult<Vec<DatabaseSnapshot>, Error> {
     FutureResult::new(async move { Ok(vec![]) })
+  }
+
+  fn summary_database_row(
+    &self,
+    workspace_id: &str,
+    _object_id: &str,
+    summary_row: SummaryRowContent,
+  ) -> FutureResult<String, Error> {
+    let workspace_id = workspace_id.to_string();
+    let try_get_client = self.inner.try_get_client();
+    FutureResult::new(async move {
+      let map: Map<String, Value> = summary_row
+        .into_iter()
+        .map(|(key, value)| (key, Value::String(value)))
+        .collect();
+      let params = SummarizeRowParams {
+        workspace_id,
+        data: SummarizeRowData::Content(map),
+      };
+      let data = try_get_client?.summarize_row(params).await?;
+      Ok(data.text)
+    })
+  }
+
+  fn translate_database_row(
+    &self,
+    workspace_id: &str,
+    translate_row: TranslateRowContent,
+    language: &str,
+  ) -> FutureResult<TranslateRowResponse, Error> {
+    let language = language.to_string();
+    let workspace_id = workspace_id.to_string();
+    let try_get_client = self.inner.try_get_client();
+    FutureResult::new(async move {
+      let data = TranslateRowData {
+        cells: translate_row,
+        language,
+        include_header: false,
+      };
+
+      let params = TranslateRowParams { workspace_id, data };
+      let data = try_get_client?.translate_row(params).await?;
+      Ok(data)
+    })
   }
 }

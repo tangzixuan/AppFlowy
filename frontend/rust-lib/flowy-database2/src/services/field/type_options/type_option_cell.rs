@@ -10,11 +10,13 @@ use lib_infra::box_any::BoxAny;
 
 use crate::entities::FieldType;
 use crate::services::cell::{CellCache, CellDataChangeset, CellDataDecoder, CellProtobufBlob};
+use crate::services::field::summary_type_option::summary::SummarizationTypeOption;
+use crate::services::field::translate_type_option::translate::TranslateTypeOption;
 use crate::services::field::{
   CheckboxTypeOption, ChecklistTypeOption, DateTypeOption, MultiSelectTypeOption, NumberTypeOption,
-  RelationTypeOption, RichTextTypeOption, SingleSelectTypeOption, TimestampTypeOption, TypeOption,
-  TypeOptionCellData, TypeOptionCellDataCompare, TypeOptionCellDataFilter, TypeOptionCellDataSerde,
-  TypeOptionTransform, URLTypeOption,
+  RelationTypeOption, RichTextTypeOption, SingleSelectTypeOption, TimeTypeOption,
+  TimestampTypeOption, TypeOption, TypeOptionCellData, TypeOptionCellDataCompare,
+  TypeOptionCellDataFilter, TypeOptionCellDataSerde, TypeOptionTransform, URLTypeOption,
 };
 use crate::services::sort::SortCondition;
 
@@ -166,23 +168,24 @@ where
     if let Some(cell_data_cache) = self.cell_data_cache.as_ref() {
       let field_type = FieldType::from(field.field_type);
       let key = CellDataCacheKey::new(field, field_type, cell);
-      // tracing::trace!(
-      //   "Cell cache update: field_type:{}, cell: {:?}, cell_data: {:?}",
-      //   field_type,
-      //   cell,
-      //   cell_data
-      // );
+      tracing::trace!(
+        "Cell cache update: field_type:{}, cell: {:?}, cell_data: {:?}",
+        field_type,
+        cell,
+        cell_data
+      );
       cell_data_cache.write().insert(key.as_ref(), cell_data);
     }
   }
 
   fn get_cell_data(&self, cell: &Cell, field: &Field) -> Option<T::CellData> {
     let field_type_of_cell = get_field_type_from_cell(cell)?;
-
     if let Some(cell_data) = self.get_cell_data_from_cache(cell, field) {
       return Some(cell_data);
     }
 
+    // If the field type of the cell is the same as the field type of the handler, we can directly decode the cell.
+    // Otherwise, we need to transform the cell to the field type of the handler.
     let cell_data = if field_type_of_cell == self.field_type {
       Some(self.decode_cell(cell).unwrap_or_default())
     } else if is_type_option_cell_transformable(field_type_of_cell, self.field_type) {
@@ -437,6 +440,36 @@ impl<'a> TypeOptionCellExt<'a> {
             self.cell_data_cache.clone(),
           )
         }),
+      FieldType::Summary => self
+        .field
+        .get_type_option::<SummarizationTypeOption>(field_type)
+        .map(|type_option| {
+          TypeOptionCellDataHandlerImpl::new_with_boxed(
+            type_option,
+            field_type,
+            self.cell_data_cache.clone(),
+          )
+        }),
+      FieldType::Time => self
+        .field
+        .get_type_option::<TimeTypeOption>(field_type)
+        .map(|type_option| {
+          TypeOptionCellDataHandlerImpl::new_with_boxed(
+            type_option,
+            field_type,
+            self.cell_data_cache.clone(),
+          )
+        }),
+      FieldType::Translate => self
+        .field
+        .get_type_option::<TranslateTypeOption>(field_type)
+        .map(|type_option| {
+          TypeOptionCellDataHandlerImpl::new_with_boxed(
+            type_option,
+            field_type,
+            self.cell_data_cache.clone(),
+          )
+        }),
     }
   }
 
@@ -537,6 +570,14 @@ fn get_type_option_transform_handler(
     },
     FieldType::Relation => {
       Box::new(RelationTypeOption::from(type_option_data)) as Box<dyn TypeOptionTransformHandler>
+    },
+    FieldType::Summary => Box::new(SummarizationTypeOption::from(type_option_data))
+      as Box<dyn TypeOptionTransformHandler>,
+    FieldType::Time => {
+      Box::new(TimeTypeOption::from(type_option_data)) as Box<dyn TypeOptionTransformHandler>
+    },
+    FieldType::Translate => {
+      Box::new(TranslateTypeOption::from(type_option_data)) as Box<dyn TypeOptionTransformHandler>
     },
   }
 }

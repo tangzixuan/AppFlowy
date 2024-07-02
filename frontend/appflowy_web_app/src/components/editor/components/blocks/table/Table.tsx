@@ -2,6 +2,7 @@ import { EditorElementProps, TableCellNode, TableNode } from '@/components/edito
 import React, { forwardRef, memo, useMemo } from 'react';
 import { Grid } from '@atlaskit/primitives';
 import './table.scss';
+import isEqual from 'lodash-es/isEqual';
 
 const Table = memo(
   forwardRef<HTMLDivElement, EditorElementProps<TableNode>>(({ node, children, className, ...attributes }, ref) => {
@@ -37,7 +38,7 @@ const Table = memo(
     }, [rowGroup, rowDefaultHeight]);
 
     return (
-      <div ref={ref} {...attributes} className={`table-block relative my-2 px-1 ${className || ''}`}>
+      <div ref={ref} {...attributes} className={`table-block relative my-2 w-full px-1 ${className || ''}`}>
         <Grid
           id={`table-${node.blockId}`}
           rowGap='space.0'
@@ -50,7 +51,8 @@ const Table = memo(
         </Grid>
       </div>
     );
-  })
+  }),
+  (prevProps, nextProps) => isEqual(prevProps.node, nextProps.node)
 );
 
 export default Table;

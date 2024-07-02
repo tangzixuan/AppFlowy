@@ -173,7 +173,7 @@ impl DatabaseViewEditor {
   pub async fn v_did_update_row_meta(&self, row_id: &RowId, row_detail: &RowDetail) {
     let update_row = UpdatedRow::new(row_id.as_str()).with_row_meta(row_detail.clone());
     let changeset = RowsChangePB::from_update(update_row.into());
-    send_notification(&self.view_id, DatabaseNotification::DidUpdateViewRows)
+    send_notification(&self.view_id, DatabaseNotification::DidUpdateRow)
       .payload(changeset)
       .send();
   }
@@ -223,7 +223,7 @@ impl DatabaseViewEditor {
     }
     let changes = RowsChangePB::from_delete(row.id.clone().into_inner());
 
-    send_notification(&self.view_id, DatabaseNotification::DidUpdateViewRows)
+    send_notification(&self.view_id, DatabaseNotification::DidUpdateRow)
       .payload(changes)
       .send();
 
@@ -401,15 +401,12 @@ impl DatabaseViewEditor {
 
   /// Called when the user changes the grouping field
   pub async fn v_initialize_new_group(&self, field_id: &str) -> FlowyResult<()> {
-    let is_grouping_field = self.is_grouping_field(field_id).await;
-    if !is_grouping_field {
-      self.v_group_by_field(field_id).await?;
-
-      if let Some(view) = self.delegate.get_view(&self.view_id).await {
-        let setting = database_view_setting_pb_from_view(view);
-        notify_did_update_setting(&self.view_id, setting).await;
-      }
+    if let Some(view) = self.delegate.get_view(&self.view_id).await {
+      let setting = database_view_setting_pb_from_view(view);
+      notify_did_update_setting(&self.view_id, setting).await;
     }
+
+    self.v_group_by_field(field_id).await?;
     Ok(())
   }
 
@@ -1031,7 +1028,7 @@ impl DatabaseViewEditor {
       } => RowsChangePB::from_move(vec![deleted_row_id.into_inner()], vec![inserted_row.into()]),
     };
 
-    send_notification(&self.view_id, DatabaseNotification::DidUpdateViewRows)
+    send_notification(&self.view_id, DatabaseNotification::DidUpdateRow)
       .payload(changeset)
       .send();
   }

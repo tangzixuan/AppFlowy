@@ -42,6 +42,8 @@ impl EventIntegrationTest {
       set_as_current: true,
       index: None,
       section: None,
+      view_id: None,
+      extra: None,
     };
     let view = EventBuilder::new(self.clone())
       .event(FolderEvent::CreateView)

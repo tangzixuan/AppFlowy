@@ -7,6 +7,7 @@ import 'package:appflowy/plugins/trash/application/trash_service.dart';
 import 'package:appflowy/workspace/application/command_palette/search_listener.dart';
 import 'package:appflowy/workspace/application/command_palette/search_service.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/trash.pb.dart';
+import 'package:appflowy_backend/protobuf/flowy-search/notification.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-search/result.pb.dart';
 import 'package:bloc/bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -20,7 +21,6 @@ class CommandPaletteBloc
   CommandPaletteBloc() : super(CommandPaletteState.initial()) {
     _searchListener.start(
       onResultsChanged: _onResultsChanged,
-      onResultsClosed: _onResultsClosed,
     );
 
     _initTrash();
@@ -35,11 +35,13 @@ class CommandPaletteBloc
   final TrashListener _trashListener = TrashListener();
   String? _oldQuery;
   String? _workspaceId;
+  int _messagesReceived = 0;
 
   @override
   Future<void> close() {
     _trashListener.close();
     _searchListener.stop();
+    _debounceOnChanged?.cancel();
     return super.close();
   }
 
@@ -75,10 +77,18 @@ class CommandPaletteBloc
             emit(state.copyWith(query: null, isLoading: false, results: []));
           }
         },
-        resultsChanged: (results, didClose) {
+        resultsChanged: (results) {
           if (state.query != _oldQuery) {
-            emit(state.copyWith(results: []));
+            emit(state.copyWith(results: [], isLoading: true));
+            _oldQuery = state.query;
+            _messagesReceived = 0;
           }
+
+          if (state.query != results.query) {
+            return;
+          }
+
+          _messagesReceived++;
 
           final searchResults = _filterDuplicates(results.items);
           searchResults.sort((a, b) => b.score.compareTo(a.score));
@@ -86,12 +96,15 @@ class CommandPaletteBloc
           emit(
             state.copyWith(
               results: searchResults,
-              isLoading: !didClose,
+              isLoading: _messagesReceived != results.sends.toInt(),
             ),
           );
         },
         workspaceChanged: (workspaceId) {
           _workspaceId = workspaceId;
+          emit(state.copyWith(results: [], query: '', isLoading: false));
+        },
+        clearSearch: () {
           emit(state.copyWith(results: [], query: '', isLoading: false));
         },
       );
@@ -101,22 +114,15 @@ class CommandPaletteBloc
   Future<void> _initTrash() async {
     _trashListener.start(
       trashUpdated: (trashOrFailed) {
-        final trash = trashOrFailed.fold(
-          (trash) => trash,
-          (error) => null,
-        );
-
+        final trash = trashOrFailed.toNullable();
         add(CommandPaletteEvent.trashChanged(trash: trash));
       },
     );
 
     final trashOrFailure = await _trashService.readTrash();
-    final trashRes = trashOrFailure.fold(
-      (trash) => trash,
-      (error) => null,
-    );
+    final trash = trashOrFailure.toNullable();
 
-    add(CommandPaletteEvent.trashChanged(trash: trashRes?.items));
+    add(CommandPaletteEvent.trashChanged(trash: trash?.items));
   }
 
   void _debounceOnSearchChanged(String value) {
@@ -132,6 +138,10 @@ class CommandPaletteBloc
     final res = [...results];
 
     for (final item in results) {
+      if (item.data.trim().isEmpty) {
+        continue;
+      }
+
       final duplicateIndex = currentItems.indexWhere((a) => a.id == item.id);
       if (duplicateIndex == -1) {
         continue;
@@ -151,11 +161,8 @@ class CommandPaletteBloc
   void _performSearch(String value) =>
       add(CommandPaletteEvent.performSearch(search: value));
 
-  void _onResultsChanged(RepeatedSearchResultPB results) =>
+  void _onResultsChanged(SearchResultNotificationPB results) =>
       add(CommandPaletteEvent.resultsChanged(results: results));
-
-  void _onResultsClosed(RepeatedSearchResultPB results) =>
-      add(CommandPaletteEvent.resultsChanged(results: results, didClose: true));
 }
 
 @freezed
@@ -167,8 +174,7 @@ class CommandPaletteEvent with _$CommandPaletteEvent {
       _PerformSearch;
 
   const factory CommandPaletteEvent.resultsChanged({
-    required RepeatedSearchResultPB results,
-    @Default(false) bool didClose,
+    required SearchResultNotificationPB results,
   }) = _ResultsChanged;
 
   const factory CommandPaletteEvent.trashChanged({
@@ -178,6 +184,8 @@ class CommandPaletteEvent with _$CommandPaletteEvent {
   const factory CommandPaletteEvent.workspaceChanged({
     @Default(null) String? workspaceId,
   }) = _WorkspaceChanged;
+
+  const factory CommandPaletteEvent.clearSearch() = _ClearSearch;
 }
 
 @freezed

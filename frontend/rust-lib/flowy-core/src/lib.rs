@@ -2,8 +2,6 @@
 
 use flowy_search::folder::indexer::FolderIndexManagerImpl;
 use flowy_search::services::manager::SearchManager;
-use flowy_storage::ObjectStorageService;
-use semver::Version;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use sysinfo::System;
@@ -11,13 +9,15 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, event, info, instrument};
 
 use collab_integrate::collab_builder::{AppFlowyCollabBuilder, CollabPluginProviderType};
+use flowy_chat::chat_manager::ChatManager;
 use flowy_database2::DatabaseManager;
 use flowy_document::manager::DocumentManager;
 use flowy_error::{FlowyError, FlowyResult};
 use flowy_folder::manager::FolderManager;
 use flowy_server::af_cloud::define::ServerUser;
 
-use flowy_sqlite::kv::StorePreferences;
+use flowy_sqlite::kv::KVStorePreferences;
+use flowy_storage::manager::StorageManager;
 use flowy_user::services::authenticate_user::AuthenticateUser;
 use flowy_user::services::entities::UserConfig;
 use flowy_user::user_manager::UserManager;
@@ -25,11 +25,12 @@ use flowy_user::user_manager::UserManager;
 use lib_dispatch::prelude::*;
 use lib_dispatch::runtime::AFPluginRuntime;
 use lib_infra::priority_task::{TaskDispatcher, TaskRunner};
-use lib_infra::util::Platform;
+use lib_infra::util::OperatingSystem;
 use lib_log::stream_log::StreamLogSender;
 use module::make_plugins;
 
 use crate::config::AppFlowyCoreConfig;
+use crate::deps_resolve::file_storage_deps::FileStorageResolver;
 use crate::deps_resolve::*;
 use crate::integrate::collab_interact::CollabInteractImpl;
 use crate::integrate::log::init_log;
@@ -56,8 +57,10 @@ pub struct AppFlowyCore {
   pub event_dispatcher: Arc<AFPluginDispatcher>,
   pub server_provider: Arc<ServerProvider>,
   pub task_dispatcher: Arc<RwLock<TaskDispatcher>>,
-  pub store_preference: Arc<StorePreferences>,
+  pub store_preference: Arc<KVStorePreferences>,
   pub search_manager: Arc<SearchManager>,
+  pub chat_manager: Arc<ChatManager>,
+  pub storage_manager: Arc<StorageManager>,
 }
 
 impl AppFlowyCore {
@@ -66,7 +69,7 @@ impl AppFlowyCore {
     runtime: Arc<AFPluginRuntime>,
     stream_log_sender: Option<Arc<dyn StreamLogSender>>,
   ) -> Self {
-    let platform = Platform::from(&config.platform);
+    let platform = OperatingSystem::from(&config.platform);
 
     #[allow(clippy::if_same_then_else)]
     if cfg!(debug_assertions) {
@@ -99,20 +102,19 @@ impl AppFlowyCore {
   #[instrument(skip(config, runtime))]
   async fn init(config: AppFlowyCoreConfig, runtime: Arc<AFPluginRuntime>) -> Self {
     // Init the key value database
-    let store_preference = Arc::new(StorePreferences::new(&config.storage_path).unwrap());
+    let store_preference = Arc::new(KVStorePreferences::new(&config.storage_path).unwrap());
     info!("🔥{:?}", &config);
 
     let task_scheduler = TaskDispatcher::new(Duration::from_secs(2));
     let task_dispatcher = Arc::new(RwLock::new(task_scheduler));
     runtime.spawn(TaskRunner::run(task_dispatcher.clone()));
 
-    let app_version = Version::parse(&config.app_version).unwrap_or_else(|_| Version::new(0, 5, 4));
     let user_config = UserConfig::new(
       &config.name,
       &config.storage_path,
       &config.application_path,
       &config.device_id,
-      app_version,
+      config.app_version.clone(),
     );
 
     let authenticate_user = Arc::new(AuthenticateUser::new(
@@ -139,7 +141,14 @@ impl AppFlowyCore {
       document_manager,
       collab_builder,
       search_manager,
+      chat_manager,
+      storage_manager,
     ) = async {
+      let storage_manager = FileStorageResolver::resolve(
+        Arc::downgrade(&authenticate_user),
+        server_provider.clone(),
+        &user_config.storage_path,
+      );
       /// The shared collab builder is used to build the [Collab] instance. The plugins will be loaded
       /// on demand based on the [CollabPluginConfig].
       let collab_builder = Arc::new(AppFlowyCollabBuilder::new(
@@ -163,17 +172,32 @@ impl AppFlowyCore {
         &database_manager,
         collab_builder.clone(),
         server_provider.clone(),
-        Arc::downgrade(&(server_provider.clone() as Arc<dyn ObjectStorageService>)),
+        Arc::downgrade(&storage_manager.storage_service),
       );
 
-      let folder_indexer = Arc::new(FolderIndexManagerImpl::new(None));
+      let chat_manager = ChatDepsResolver::resolve(
+        Arc::downgrade(&authenticate_user),
+        server_provider.clone(),
+        store_preference.clone(),
+      );
+
+      let folder_indexer = Arc::new(FolderIndexManagerImpl::new(Some(Arc::downgrade(
+        &authenticate_user,
+      ))));
+
+      let folder_operation_handlers = folder_operation_handlers(
+        document_manager.clone(),
+        database_manager.clone(),
+        chat_manager.clone(),
+      );
+
       let folder_manager = FolderDepsResolver::resolve(
         Arc::downgrade(&authenticate_user),
-        &document_manager,
-        &database_manager,
         collab_builder.clone(),
         server_provider.clone(),
         folder_indexer.clone(),
+        store_preference.clone(),
+        folder_operation_handlers,
       )
       .await;
 
@@ -187,7 +211,12 @@ impl AppFlowyCore {
       )
       .await;
 
-      let search_manager = SearchDepsResolver::resolve(folder_indexer).await;
+      let search_manager = SearchDepsResolver::resolve(
+        folder_indexer,
+        server_provider.clone(),
+        folder_manager.clone(),
+      )
+      .await;
 
       (
         user_manager,
@@ -197,6 +226,8 @@ impl AppFlowyCore {
         document_manager,
         collab_builder,
         search_manager,
+        chat_manager,
+        storage_manager,
       )
     }
     .await;
@@ -207,7 +238,7 @@ impl AppFlowyCore {
       database_manager: database_manager.clone(),
       document_manager: document_manager.clone(),
       server_provider: server_provider.clone(),
-      config: config.clone(),
+      storage_manager: storage_manager.clone(),
     };
 
     let collab_interact_impl = CollabInteractImpl {
@@ -232,6 +263,7 @@ impl AppFlowyCore {
         Arc::downgrade(&user_manager),
         Arc::downgrade(&document_manager),
         Arc::downgrade(&search_manager),
+        Arc::downgrade(&chat_manager),
       ),
     ));
 
@@ -246,6 +278,8 @@ impl AppFlowyCore {
       task_dispatcher,
       store_preference,
       search_manager,
+      chat_manager,
+      storage_manager,
     }
   }
 

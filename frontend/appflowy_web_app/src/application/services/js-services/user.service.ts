@@ -1,8 +1,14 @@
 import { UserService } from '@/application/services/services.type';
-import { UserProfile } from '@/application/user.type';
-import { notify } from '@/components/_shared/notify';
+import { UserProfile, UserWorkspace } from '@/application/user.type';
 import { APIService } from 'src/application/services/js-services/wasm';
-import { getAuthInfo, getSignInUser, setSignInUser } from '@/application/services/js-services/storage';
+import {
+  getAuthInfo,
+  getSignInUser,
+  getUserWorkspace,
+  invalidToken,
+  setSignInUser,
+  setUserWorkspace,
+} from 'src/application/services/js-services/session';
 import { asyncDataDecorator } from '@/application/services/js-services/decorator';
 
 async function getUser() {
@@ -12,8 +18,7 @@ async function getUser() {
     return user;
   } catch (e) {
     console.error(e);
-    notify.error('Failed to get user profile, please try refreshing the page');
-    // invalidToken();
+    invalidToken();
   }
 }
 
@@ -24,10 +29,17 @@ export class JSUserService implements UserService {
       return Promise.reject('Not authenticated');
     }
 
+    await this.getUserWorkspace();
+
     return null!;
   }
 
   async checkUser(): Promise<boolean> {
     return (await getSignInUser()) !== undefined;
+  }
+
+  @asyncDataDecorator<void, UserWorkspace>(getUserWorkspace, setUserWorkspace, APIService.getUserWorkspace)
+  async getUserWorkspace(): Promise<UserWorkspace> {
+    return null!;
   }
 }

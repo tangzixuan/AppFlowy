@@ -3,13 +3,14 @@ import 'package:appflowy/core/network_monitor.dart';
 import 'package:appflowy/env/cloud_env.dart';
 import 'package:appflowy/plugins/document/application/prelude.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/clipboard_service.dart';
-import 'package:appflowy/plugins/document/presentation/editor_plugins/openai/service/openai_client.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/openai/service/ai_client.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/stability_ai/stability_ai_client.dart';
 import 'package:appflowy/plugins/trash/application/prelude.dart';
 import 'package:appflowy/shared/appflowy_cache_manager.dart';
 import 'package:appflowy/shared/custom_image_cache_manager.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/startup/tasks/appflowy_cloud_task.dart';
+import 'package:appflowy/user/application/ai_service.dart';
 import 'package:appflowy/user/application/auth/af_cloud_auth_service.dart';
 import 'package:appflowy/user/application/auth/auth_service.dart';
 import 'package:appflowy/user/application/auth/supabase_auth_service.dart';
@@ -27,6 +28,7 @@ import 'package:appflowy/workspace/application/settings/appearance/desktop_appea
 import 'package:appflowy/workspace/application/settings/appearance/mobile_appearance.dart';
 import 'package:appflowy/workspace/application/settings/prelude.dart';
 import 'package:appflowy/workspace/application/sidebar/rename_view/rename_view_bloc.dart';
+import 'package:appflowy/workspace/application/subscription_success_listenable/subscription_success_listenable.dart';
 import 'package:appflowy/workspace/application/tabs/tabs_bloc.dart';
 import 'package:appflowy/workspace/application/user/prelude.dart';
 import 'package:appflowy/workspace/application/view/prelude.dart';
@@ -79,25 +81,17 @@ void _resolveCommonService(
   IntegrationMode mode,
 ) async {
   getIt.registerFactory<FilePickerService>(() => FilePicker());
-  if (mode.isTest) {
-    getIt.registerFactory<ApplicationDataStorage>(
-      () => MockApplicationDataStorage(),
-    );
-  } else {
-    getIt.registerFactory<ApplicationDataStorage>(
-      () => ApplicationDataStorage(),
-    );
-  }
 
-  getIt.registerFactoryAsync<OpenAIRepository>(
+  getIt.registerFactory<ApplicationDataStorage>(
+    () => mode.isTest ? MockApplicationDataStorage() : ApplicationDataStorage(),
+  );
+
+  getIt.registerFactoryAsync<AIRepository>(
     () async {
       final result = await UserBackendService.getCurrentUserProfile();
       return result.fold(
         (s) {
-          return HttpOpenAIRepository(
-            client: http.Client(),
-            apiKey: s.openaiKey,
-          );
+          return AppFlowyAIService();
         },
         (e) {
           throw Exception('Failed to get user profile: ${e.msg}');
@@ -173,6 +167,9 @@ void _resolveUserDeps(GetIt getIt, IntegrationMode mode) {
   getIt.registerFactory<SplashBloc>(() => SplashBloc());
   getIt.registerLazySingleton<NetworkListener>(() => NetworkListener());
   getIt.registerLazySingleton<CachedRecentService>(() => CachedRecentService());
+  getIt.registerLazySingleton<SubscriptionSuccessListenable>(
+    () => SubscriptionSuccessListenable(),
+  );
 }
 
 void _resolveHomeDeps(GetIt getIt) {

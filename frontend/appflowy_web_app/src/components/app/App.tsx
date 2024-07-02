@@ -1,3 +1,4 @@
+import FolderPage from '@/pages/FolderPage';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoutes from '@/components/auth/ProtectedRoutes';
 import LoginPage from '@/pages/LoginPage';
@@ -8,14 +9,15 @@ const AppMain = withAppWrapper(() => {
   return (
     <Routes>
       <Route path={'/'} element={<ProtectedRoutes />}>
-        <Route path={'/workspace/:workspaceId/:collabType/:objectId'} element={<ProductPage />} />
+        <Route path={'/view/:workspaceId'} element={<FolderPage />} />
+        <Route path={'/view/:workspaceId/:objectId'} element={<ProductPage />} />
       </Route>
       <Route path={'/login'} element={<LoginPage />} />
     </Routes>
   );
 });
 
-function App () {
+function App() {
   return (
     <BrowserRouter>
       <AppMain />
@@ -24,4 +26,3 @@ function App () {
 }
 
 export default App;
-

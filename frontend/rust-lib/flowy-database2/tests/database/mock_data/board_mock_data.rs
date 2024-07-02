@@ -2,17 +2,17 @@ use collab_database::database::{gen_database_id, gen_database_view_id, gen_row_i
 use collab_database::views::{DatabaseLayout, DatabaseView, LayoutSetting, LayoutSettings};
 use strum::IntoEnumIterator;
 
+use crate::database::mock_data::{COMPLETED, FACEBOOK, GOOGLE, PAUSED, PLANNED, TWITTER};
+use event_integration_test::database_event::TestRowBuilder;
 use flowy_database2::entities::FieldType;
 use flowy_database2::services::field::checklist_type_option::ChecklistTypeOption;
+use flowy_database2::services::field::summary_type_option::summary::SummarizationTypeOption;
 use flowy_database2::services::field::{
   DateFormat, DateTypeOption, FieldBuilder, MultiSelectTypeOption, RelationTypeOption,
   SelectOption, SelectOptionColor, SingleSelectTypeOption, TimeFormat, TimestampTypeOption,
 };
 use flowy_database2::services::field_settings::default_field_settings_for_fields;
 use flowy_database2::services::setting::BoardLayoutSetting;
-
-use crate::database::database_editor::TestRowBuilder;
-use crate::database::mock_data::{COMPLETED, FACEBOOK, GOOGLE, PAUSED, PLANNED, TWITTER};
 
 // Kanban board unit test mock data
 pub fn make_test_board() -> DatabaseData {
@@ -127,6 +127,20 @@ pub fn make_test_board() -> DatabaseData {
           .build();
         fields.push(relation_field);
       },
+      FieldType::Summary => {
+        let type_option = SummarizationTypeOption { auto_fill: false };
+        let relation_field = FieldBuilder::new(field_type, type_option)
+          .name("AI summary")
+          .build();
+        fields.push(relation_field);
+      },
+      FieldType::Time => {
+        let time_field = FieldBuilder::from_field_type(field_type)
+          .name("Estimated time")
+          .build();
+        fields.push(time_field);
+      },
+      FieldType::Translate => {},
     }
   }
 

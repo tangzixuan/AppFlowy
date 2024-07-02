@@ -1,48 +1,21 @@
-import { AFConfigContext } from '@/components/app/AppConfig';
+import { YDoc } from '@/application/collab.type';
 import CollaborativeEditor from '@/components/editor/CollaborativeEditor';
-import { EditorContextProvider } from '@/components/editor/EditorContext';
-import { CircularProgress } from '@mui/material';
-import React, { useCallback, useContext, useEffect, useState } from 'react';
-import * as Y from 'yjs';
+import { defaultLayoutStyle, EditorContextProvider, EditorLayoutStyle } from '@/components/editor/EditorContext';
+import React, { memo } from 'react';
 import './editor.scss';
 
-export const Editor = ({
-  workspaceId,
-  documentId,
-  readOnly,
-}: {
-  documentId: string;
-  workspaceId: string;
+export interface EditorProps {
   readOnly: boolean;
-}) => {
-  const [doc, setDoc] = useState<Y.Doc>();
+  doc: YDoc;
+  layoutStyle?: EditorLayoutStyle;
+}
 
-  const documentService = useContext(AFConfigContext)?.service?.documentService;
-
-  const handleOpenDocument = useCallback(async () => {
-    if (!documentService) return;
-    const doc = await documentService.openDocument(workspaceId, documentId);
-
-    setDoc(doc);
-  }, [documentService, workspaceId, documentId]);
-
-  useEffect(() => {
-    void handleOpenDocument();
-  }, [handleOpenDocument]);
-
-  if (!doc) {
-    return (
-      <div className={'justify-content flex h-full w-full items-center'}>
-        <CircularProgress />
-      </div>
-    );
-  }
-
+export const Editor = memo(({ readOnly, doc, layoutStyle = defaultLayoutStyle }: EditorProps) => {
   return (
-    <EditorContextProvider readOnly={readOnly}>
+    <EditorContextProvider layoutStyle={layoutStyle} readOnly={readOnly}>
       <CollaborativeEditor doc={doc} />
     </EditorContextProvider>
   );
-};
+});
 
 export default Editor;

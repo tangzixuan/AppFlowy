@@ -52,6 +52,7 @@
 
 [role=textbox] {
   .text-element {
+    @apply my-1;
     &::selection {
       @apply bg-transparent;
     }
@@ -136,6 +137,18 @@ span[data-slate-placeholder="true"]:not(.inline-block-content) {
   }
 }
 
+.text-placeholder {
+  &:after {
+    @apply left-0;
+  }
+}
+
+.has-start-icon .text-placeholder {
+  &:after {
+    @apply left-[24px];
+  }
+}
+
 .block-align-center {
   .text-placeholder {
     @apply left-[calc(50%+1px)];
@@ -153,23 +166,6 @@ span[data-slate-placeholder="true"]:not(.inline-block-content) {
 
 }
 
-.block-align-left {
-  .text-placeholder {
-    &:after {
-      @apply left-0;
-    }
-  }
-
-  .has-start-icon .text-placeholder {
-    &:after {
-      @apply left-[24px];
-    }
-  }
-}
-
-.text-block-icon {
-  @apply top-[2px];
-}
 
 .block-align-right {
 
@@ -202,20 +198,17 @@ span[data-slate-placeholder="true"]:not(.inline-block-content) {
 .bulleted-icon {
   &:after {
     content: attr(data-letter);
+    font-weight: 500;
   }
 }
 
 .numbered-icon {
   &:after {
     content: attr(data-number) ".";
+    font-weight: 500;
   }
 }
 
-
-.grid-block .grid-scroll-container::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
 
 .image-render {
   .image-resizer {
@@ -243,7 +236,7 @@ span[data-slate-placeholder="true"]:not(.inline-block-content) {
 
   &:hover {
     .container-bg {
-      background: var(--content-blue-100) !important;
+      background: var(--fill-list-hover) !important;
     }
   }
 }
@@ -264,14 +257,47 @@ span[data-slate-placeholder="true"]:not(.inline-block-content) {
 .mention-inline {
   height: inherit;
   overflow: hidden;
-  @apply px-1 inline-flex select-none gap-1 relative;
+  @apply inline-flex select-none gap-1 relative;
 
   .mention-icon {
     @apply absolute top-1/2 transform -translate-y-1/2;
+    font-size: 1.25em;
   }
 
   .mention-content {
-    @apply ml-5;
+    @apply ml-6;
   }
 
+}
+
+.text-block-icon {
+  @apply flex items-center justify-center;
+}
+
+
+.font-small {
+  .text-element {
+    line-height: 1.7;
+  }
+}
+
+
+.font-large {
+  .text-element {
+    line-height: 1.2;
+  }
+}
+
+.line-height-large {
+  .text-element {
+    margin-top: 6px;
+    margin-bottom: 6px;
+  }
+}
+
+.line-height-small {
+  .text-element {
+    margin-top: 0px;
+    margin-bottom: 0px;
+  }
 }

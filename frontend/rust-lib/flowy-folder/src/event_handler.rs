@@ -266,43 +266,49 @@ pub(crate) async fn move_nested_view_handler(
 
 #[tracing::instrument(level = "debug", skip(data, folder), err)]
 pub(crate) async fn duplicate_view_handler(
-  data: AFPluginData<ViewPB>,
+  data: AFPluginData<DuplicateViewPayloadPB>,
   folder: AFPluginState<Weak<FolderManager>>,
 ) -> Result<(), FlowyError> {
   let folder = upgrade_folder(folder)?;
-  let view: ViewPB = data.into_inner();
-  folder.duplicate_view(&view.id).await?;
+  let params: DuplicateViewParams = data.into_inner().try_into()?;
+  folder.duplicate_view(params).await?;
   Ok(())
 }
 
 #[tracing::instrument(level = "debug", skip(folder), err)]
 pub(crate) async fn read_favorites_handler(
   folder: AFPluginState<Weak<FolderManager>>,
-) -> DataResult<RepeatedViewPB, FlowyError> {
+) -> DataResult<RepeatedFavoriteViewPB, FlowyError> {
   let folder = upgrade_folder(folder)?;
   let favorite_items = folder.get_all_favorites().await;
   let mut views = vec![];
   for item in favorite_items {
     if let Ok(view) = folder.get_view_pb(&item.id).await {
-      views.push(view);
+      views.push(SectionViewPB {
+        item: view,
+        timestamp: item.timestamp,
+      });
     }
   }
-  data_result_ok(RepeatedViewPB { items: views })
+  data_result_ok(RepeatedFavoriteViewPB { items: views })
 }
 
 #[tracing::instrument(level = "debug", skip(folder), err)]
 pub(crate) async fn read_recent_views_handler(
   folder: AFPluginState<Weak<FolderManager>>,
-) -> DataResult<RepeatedViewPB, FlowyError> {
+) -> DataResult<RepeatedRecentViewPB, FlowyError> {
   let folder = upgrade_folder(folder)?;
   let recent_items = folder.get_my_recent_sections().await;
   let mut views = vec![];
   for item in recent_items {
     if let Ok(view) = folder.get_view_pb(&item.id).await {
-      views.push(view);
+      views.push(SectionViewPB {
+        item: view,
+        timestamp: item.timestamp,
+      });
     }
   }
-  data_result_ok(RepeatedViewPB { items: views })
+  data_result_ok(RepeatedRecentViewPB { items: views })
 }
 
 #[tracing::instrument(level = "debug", skip(folder), err)]
@@ -357,14 +363,13 @@ pub(crate) async fn delete_my_trash_handler(
 
 #[tracing::instrument(level = "debug", skip(data, folder), err)]
 pub(crate) async fn import_data_handler(
-  data: AFPluginData<ImportPB>,
+  data: AFPluginData<ImportPayloadPB>,
   folder: AFPluginState<Weak<FolderManager>>,
-) -> DataResult<ViewPB, FlowyError> {
+) -> DataResult<RepeatedViewPB, FlowyError> {
   let folder = upgrade_folder(folder)?;
   let params: ImportParams = data.into_inner().try_into()?;
-  let view = folder.import(params).await?;
-  let view_pb = view_pb_without_child_views(view);
-  data_result_ok(view_pb)
+  let views = folder.import(params).await?;
+  data_result_ok(views)
 }
 
 #[tracing::instrument(level = "debug", skip(folder), err)]

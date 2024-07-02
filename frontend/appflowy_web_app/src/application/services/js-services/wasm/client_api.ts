@@ -1,15 +1,17 @@
-import { ClientAPI } from '@appflowyinc/client-api-wasm';
-import { UserProfile } from '@/application/user.type';
-import { AFCloudConfig } from '@/application/services/services.type';
-import { invalidToken, readTokenStr, writeToken } from '@/application/services/js-services/storage';
 import { CollabType } from '@/application/collab.type';
+import { ClientAPI } from '@appflowyinc/client-api-wasm';
+import { UserProfile, UserWorkspace } from '@/application/user.type';
+import { AFCloudConfig } from '@/application/services/services.type';
+import { invalidToken, readTokenStr, writeToken } from 'src/application/services/js-services/session';
 
 let client: ClientAPI;
 
-export function initAPIService (config: AFCloudConfig & {
-  deviceId: string;
-  clientId: string;
-}) {
+export function initAPIService(
+  config: AFCloudConfig & {
+    deviceId: string;
+    clientId: string;
+  }
+) {
   window.refresh_token = writeToken;
   window.invalid_token = invalidToken;
   client = ClientAPI.new({
@@ -33,15 +35,15 @@ export function initAPIService (config: AFCloudConfig & {
   client.subscribe();
 }
 
-export function signIn (email: string, password: string) {
+export function signIn(email: string, password: string) {
   return client.login(email, password);
 }
 
-export function logout () {
+export function logout() {
   return client.logout();
 }
 
-export async function getUser (): Promise<UserProfile> {
+export async function getUser(): Promise<UserProfile> {
   try {
     const user = await client.get_user();
 
@@ -62,7 +64,7 @@ export async function getUser (): Promise<UserProfile> {
   }
 }
 
-export async function getCollab (workspaceId: string, object_id: string, collabType: CollabType) {
+export async function getCollab(workspaceId: string, object_id: string, collabType: CollabType) {
   const res = await client.get_collab({
     workspace_id: workspaceId,
     object_id: object_id,
@@ -73,5 +75,47 @@ export async function getCollab (workspaceId: string, object_id: string, collabT
 
   return {
     state,
+  };
+}
+
+export async function batchGetCollab(
+  workspaceId: string,
+  params: {
+    object_id: string;
+    collab_type: CollabType;
+  }[]
+) {
+  const res = (await client.batch_get_collab(
+    workspaceId,
+    params.map((param) => ({
+      object_id: param.object_id,
+      collab_type: Number(param.collab_type) as 0 | 1 | 2 | 3 | 4 | 5,
+    }))
+  )) as unknown as Map<string, { doc_state: number[] }>;
+
+  const result: Record<string, number[]> = {};
+
+  res.forEach((value, key) => {
+    result[key] = value.doc_state;
+  });
+  return result;
+}
+
+export async function getUserWorkspace(): Promise<UserWorkspace> {
+  const res = await client.get_user_workspace();
+
+  return {
+    visitingWorkspaceId: res.visiting_workspace_id,
+    workspaces: res.workspaces.map((workspace) => ({
+      id: workspace.workspace_id,
+      name: workspace.workspace_name,
+      icon: workspace.icon,
+      owner: {
+        id: Number(workspace.owner_uid),
+        name: workspace.owner_name,
+      },
+      type: workspace.workspace_type,
+      workspaceDatabaseId: workspace.database_storage_id,
+    })),
   };
 }

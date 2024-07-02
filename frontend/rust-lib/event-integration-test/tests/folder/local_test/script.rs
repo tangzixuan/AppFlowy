@@ -126,8 +126,13 @@ impl FolderTest {
         let app = create_view(sdk, &self.workspace.id, &name, &desc, ViewLayout::Document).await;
         self.parent_view = app;
       },
-      FolderScript::AssertParentView(app) => {
-        assert_eq!(self.parent_view, app, "App not equal");
+      FolderScript::AssertParentView(view) => {
+        assert_eq!(self.parent_view.id, view.id, "view id not equal");
+        assert_eq!(self.parent_view.name, view.name, "view name not equal");
+        assert_eq!(
+          self.parent_view.is_favorite, view.is_favorite,
+          "view name not equal"
+        );
       },
       FolderScript::ReloadParentView(parent_view_id) => {
         let parent_view = read_view(sdk, &parent_view_id).await;
@@ -158,7 +163,9 @@ impl FolderTest {
         assert_eq!(self.child_view, view, "View not equal");
       },
       FolderScript::ReadView(view_id) => {
-        let view = read_view(sdk, &view_id).await;
+        let mut view = read_view(sdk, &view_id).await;
+        // Ignore the last edited time
+        view.last_edited = 0;
         self.child_view = view;
       },
       FolderScript::UpdateView {
@@ -196,7 +203,7 @@ impl FolderTest {
       },
       FolderScript::ReadFavorites => {
         let favorites = read_favorites(sdk).await;
-        self.favorites = favorites.to_vec();
+        self.favorites = favorites.items.iter().map(|x| x.item.clone()).collect();
       },
     }
   }
@@ -245,6 +252,8 @@ pub async fn create_view(
     set_as_current: true,
     index: None,
     section: None,
+    view_id: None,
+    extra: None,
   };
   EventBuilder::new(sdk.clone())
     .event(CreateView)
@@ -375,10 +384,10 @@ pub async fn toggle_favorites(sdk: &EventIntegrationTest, view_id: Vec<String>) 
     .await;
 }
 
-pub async fn read_favorites(sdk: &EventIntegrationTest) -> RepeatedViewPB {
+pub async fn read_favorites(sdk: &EventIntegrationTest) -> RepeatedFavoriteViewPB {
   EventBuilder::new(sdk.clone())
     .event(ReadFavorites)
     .async_send()
     .await
-    .parse::<RepeatedViewPB>()
+    .parse::<RepeatedFavoriteViewPB>()
 }

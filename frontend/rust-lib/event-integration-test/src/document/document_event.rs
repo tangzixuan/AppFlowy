@@ -65,6 +65,8 @@ impl DocumentEventTest {
       set_as_current: true,
       index: None,
       section: None,
+      view_id: None,
+      extra: None,
     };
     EventBuilder::new(core.clone())
       .event(FolderEvent::CreateView)

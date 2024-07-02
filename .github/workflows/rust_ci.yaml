@@ -32,14 +32,14 @@ jobs:
       #     swap-size-mb: 1024
       #     remove-dotnet: 'true'
 
-      # # the following step is required to avoid running out of space
-      # - name: Maximize build space
-      #   run: |
-      #     sudo rm -rf /usr/share/dotnet
-      #     sudo rm -rf /opt/ghc
-      #     sudo rm -rf "/usr/local/share/boost"
-      #     sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-      #     sudo docker image prune --all --force
+      # the following step is required to avoid running out of space
+      - name: Maximize build space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force
 
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -96,7 +96,7 @@ jobs:
           af_cloud_test_ws_url: ws://localhost/ws/v1
           af_cloud_test_gotrue_url: http://localhost/gotrue
         run: |
-          DISABLE_CI_TEST_LOG="true" cargo test --no-default-features --features="dart" -- --nocapture
+          DISABLE_CI_TEST_LOG="true" cargo test --no-default-features --features="dart"
 
       - name: rustfmt rust-lib
         run: cargo fmt --all -- --check

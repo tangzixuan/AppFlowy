@@ -8,6 +8,7 @@ import 'package:appflowy/workspace/application/recent/cached_recent_service.dart
 import 'package:appflowy/workspace/application/view/view_listener.dart';
 import 'package:appflowy/workspace/application/view/view_service.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
+import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_result/appflowy_result.dart';
 import 'package:collection/collection.dart';
@@ -18,7 +19,7 @@ import 'package:protobuf/protobuf.dart';
 part 'view_bloc.freezed.dart';
 
 class ViewBloc extends Bloc<ViewEvent, ViewState> {
-  ViewBloc({required this.view})
+  ViewBloc({required this.view, this.shouldLoadChildViews = true})
       : viewBackendSvc = ViewBackendService(),
         listener = ViewListener(viewId: view.id),
         favoriteListener = FavoriteListener(),
@@ -30,6 +31,7 @@ class ViewBloc extends Bloc<ViewEvent, ViewState> {
   final ViewBackendService viewBackendSvc;
   final ViewListener listener;
   final FavoriteListener favoriteListener;
+  final bool shouldLoadChildViews;
 
   @override
   Future<void> close() async {
@@ -73,8 +75,10 @@ class ViewBloc extends Bloc<ViewEvent, ViewState> {
               },
             );
             final isExpanded = await _getViewIsExpanded(view);
-            emit(state.copyWith(isExpanded: isExpanded));
-            await _loadViewsWhenExpanded(emit, isExpanded);
+            emit(state.copyWith(isExpanded: isExpanded, view: view));
+            if (shouldLoadChildViews) {
+              await _loadChildViews(emit);
+            }
           },
           setIsEditing: (e) {
             emit(state.copyWith(isEditing: e.isEditing));
@@ -150,7 +154,11 @@ class ViewBloc extends Bloc<ViewEvent, ViewState> {
             );
           },
           duplicate: (e) async {
-            final result = await ViewBackendService.duplicate(view: view);
+            final result = await ViewBackendService.duplicate(
+              view: view,
+              openAfterDuplicate: true,
+              includeChildren: true,
+            );
             emit(
               result.fold(
                 (l) =>
@@ -215,6 +223,18 @@ class ViewBloc extends Bloc<ViewEvent, ViewState> {
               value.isPublic,
             );
           },
+          updateIcon: (value) async {
+            await ViewBackendService.updateViewIcon(
+              viewId: view.id,
+              viewIcon: value.icon ?? '',
+            );
+          },
+          collapseAllPages: (value) async {
+            for (final childView in view.childViews) {
+              await _setViewIsExpanded(childView, false);
+            }
+            add(const ViewEvent.setIsExpanded(false));
+          },
         );
       },
     );
@@ -258,6 +278,33 @@ class ViewBloc extends Bloc<ViewEvent, ViewState> {
           successOrFailure: FlowyResult.failure(error),
           isExpanded: true,
           isLoading: false,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadChildViews(
+    Emitter<ViewState> emit,
+  ) async {
+    final viewsOrFailed =
+        await ViewBackendService.getChildViews(viewId: state.view.id);
+
+    viewsOrFailed.fold(
+      (childViews) {
+        state.view.freeze();
+        final viewWithChildViews = state.view.rebuild((b) {
+          b.childViews.clear();
+          b.childViews.addAll(childViews);
+        });
+        emit(
+          state.copyWith(
+            view: viewWithChildViews,
+          ),
+        );
+      },
+      (error) => emit(
+        state.copyWith(
+          successOrFailure: FlowyResult.failure(error),
         ),
       ),
     );
@@ -376,8 +423,12 @@ class ViewEvent with _$ViewEvent {
   ) = ViewDidUpdate;
   const factory ViewEvent.viewUpdateChildView(ViewPB result) =
       ViewUpdateChildView;
-  const factory ViewEvent.updateViewVisibility(ViewPB view, bool isPublic) =
-      UpdateViewVisibility;
+  const factory ViewEvent.updateViewVisibility(
+    ViewPB view,
+    bool isPublic,
+  ) = UpdateViewVisibility;
+  const factory ViewEvent.updateIcon(String? icon) = UpdateIcon;
+  const factory ViewEvent.collapseAllPages() = CollapseAllPages;
 }
 
 @freezed

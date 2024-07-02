@@ -85,7 +85,7 @@ pub enum FolderEvent {
   DeleteView = 13,
 
   /// Duplicate the view
-  #[event(input = "ViewPB")]
+  #[event(input = "DuplicateViewPayloadPB")]
   DuplicateView = 14,
 
   /// Close and release the resources that are used by this view.
@@ -132,7 +132,7 @@ pub enum FolderEvent {
   #[event()]
   PermanentlyDeleteAllTrashItem = 27,
 
-  #[event(input = "ImportPB", output = "ViewPB")]
+  #[event(input = "ImportPayloadPB", output = "RepeatedViewPB")]
   ImportData = 30,
 
   #[event(input = "WorkspaceIdPB", output = "RepeatedFolderSnapshotPB")]
@@ -146,7 +146,7 @@ pub enum FolderEvent {
   #[event(input = "MoveNestedViewPayloadPB")]
   MoveNestedView = 32,
 
-  #[event(output = "RepeatedViewPB")]
+  #[event(output = "RepeatedFavoriteViewPB")]
   ReadFavorites = 33,
 
   #[event(input = "RepeatedViewIdPB")]
@@ -155,7 +155,7 @@ pub enum FolderEvent {
   #[event(input = "UpdateViewIconPayloadPB")]
   UpdateViewIcon = 35,
 
-  #[event(output = "RepeatedViewPB")]
+  #[event(output = "RepeatedRecentViewPB")]
   ReadRecentViews = 36,
 
   // used for add or remove recent views, like history

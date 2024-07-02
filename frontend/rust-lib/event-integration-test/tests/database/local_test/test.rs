@@ -314,9 +314,12 @@ async fn delete_row_event_with_invalid_row_id_test() {
     .create_grid(&current_workspace.id, "my grid view".to_owned(), vec![])
     .await;
 
-  // delete the row with empty row_id. It should return an error.
+  // delete the row with empty row_id. It should do nothing
   let error = test.delete_row(&grid_view.id, "").await;
-  assert!(error.is_some());
+  assert!(error.is_none());
+
+  let database = test.get_database(&grid_view.id).await;
+  assert_eq!(database.rows.len(), 3);
 }
 
 #[tokio::test]
@@ -694,7 +697,7 @@ async fn update_database_layout_event_test2() {
     .find(|field| field.field_type == FieldType::Checkbox)
     .unwrap();
   test
-    .set_group_by_field(&grid_view.id, &checkbox_field.id)
+    .set_group_by_field(&grid_view.id, &checkbox_field.id, vec![])
     .await;
 
   let error = test
@@ -722,7 +725,7 @@ async fn set_group_by_checkbox_field_test() {
 
   let checkbox_field = test.create_field(&board_view.id, FieldType::Checkbox).await;
   test
-    .set_group_by_field(&board_view.id, &checkbox_field.id)
+    .set_group_by_field(&board_view.id, &checkbox_field.id, vec![])
     .await;
 
   let groups = test.get_groups(&board_view.id).await;
